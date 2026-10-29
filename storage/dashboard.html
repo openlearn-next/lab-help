@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>机房求助灯</title>
+    <!-- 宿主统一提供的视图桥接：window.OpenLearnPluginBridge -->
+    <script src="/plugin-sandbox/view-bridge.js"></script>
+    <style>
+      :root {
+        --bg: #f6f7fb;
+        --panel: #ffffff;
+        --border: #e4e7ee;
+        --text: #1e293b;
+        --muted: #6b7280;
+        --accent: #4f46e5;
+        --idle: #cbd5e1;
+        --working: #3b82f6;
+        --stuck: #ef4444;
+        --done: #10b981;
+        --acked: #f59e0b;
+        --shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+      }
+      html[data-theme='dark'] {
+        --bg: #0b1220;
+        --panel: #151d2e;
+        --border: #263041;
+        --text: #e8eefc;
+        --muted: #93a1b8;
+        --accent: #818cf8;
+        --idle: #334155;
+        --working: #60a5fa;
+        --stuck: #f87171;
+        --done: #34d399;
+        --acked: #fbbf24;
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 16px 18px 28px;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+      h1 { font-size: 15px; margin: 0; font-weight: 650; letter-spacing: 0.01em; }
+      .sub { color: var(--muted); font-size: 12px; }
+      .spacer { flex: 1; }
+      .tabs { display: inline-flex; background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 2px; }
+      .tabs button {
+        border: none; background: transparent; color: var(--muted); font-size: 12px; padding: 5px 12px;
+        border-radius: 7px; cursor: pointer; font-weight: 500;
+      }
+      .tabs button.on { background: var(--accent); color: #fff; }
+      .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 8px; margin-bottom: 14px; }
+      .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 8px 11px; box-shadow: var(--shadow); }
+      .stat .k { font-size: 11px; color: var(--muted); }
+      .stat .v { font-size: 19px; font-weight: 680; letter-spacing: -0.01em; }
+      .stat .v small { font-size: 11px; font-weight: 500; color: var(--muted); margin-left: 2px; }
+      .stat.stuck .v { color: var(--stuck); }
+      .stat.done .v { color: var(--done); }
+      .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+      .cell {
+        position: relative;
+        display: flex; flex-direction: column; gap: 2px;
+        background: var(--panel); border: 1px solid var(--border); border-left-width: 4px;
+        border-radius: 9px; padding: 8px 9px; cursor: pointer; text-align: left;
+        font: inherit; color: inherit; box-shadow: var(--shadow); transition: transform 0.08s ease, border-color 0.15s;
+      }
+      .cell:hover { transform: translateY(-1px); border-color: var(--accent); }
+      .cell .seat { font-size: 11px; font-weight: 700; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .cell .name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .cell .tag { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .cell.s-idle { border-left-color: var(--idle); opacity: 0.72; }
+      .cell.s-working { border-left-color: var(--working); }
+      .cell.s-done { border-left-color: var(--done); }
+      .cell.s-stuck { border-left-color: var(--stuck); background: color-mix(in srgb, var(--stuck) 8%, var(--panel)); }
+      .cell.s-stuck .tag { color: var(--stuck); font-weight: 600; }
+      .cell.t-acked { border-left-style: dashed; }
+      .cell.t-resolved { opacity: 0.6; }
+      .cell.s-stuck.t-pending::after {
+        content: ''; position: absolute; inset: 0; border-radius: 9px;
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--stuck) 35%, transparent);
+        animation: pulse 1.8s ease-out infinite; pointer-events: none;
+      }
+      @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--stuck) 45%, transparent); }
+        70% { box-shadow: 0 0 0 7px transparent; }
+        100% { box-shadow: 0 0 0 0 transparent; }
+      }
+      .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin: 12px 0 0; }
+      .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+      .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 11px; padding: 14px; box-shadow: var(--shadow); }
+      .panel h2 { font-size: 13px; margin: 0 0 10px; font-weight: 620; }
+      .bars { display: flex; flex-direction: column; gap: 8px; }
+      .bar { display: grid; grid-template-columns: 84px 1fr 34px; align-items: center; gap: 8px; font-size: 12px; }
+      .bar .track { height: 8px; border-radius: 999px; background: color-mix(in srgb, var(--muted) 18%, transparent); overflow: hidden; }
+      .bar .fill { height: 100%; border-radius: 999px; background: var(--accent); }
+      table { width: 100%; border-collapse: collapse; font-size: 12px; }
+      th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+      th { color: var(--muted); font-weight: 560; }
+      button.btn {
+        border: 1px solid var(--border); background: var(--panel); color: var(--text);
+        border-radius: 8px; padding: 5px 11px; font-size: 12px; cursor: pointer; font-weight: 500;
+      }
+      button.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+      button.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+      .empty { color: var(--muted); font-size: 12px; padding: 14px 4px; }
+      .banner { display: none; margin-bottom: 10px; padding: 8px 11px; border-radius: 9px; font-size: 12px; }
+      .banner.show { display: block; }
+      .banner.err { background: color-mix(in srgb, var(--stuck) 14%, transparent); color: var(--stuck); }
+      .banner.info { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+      .drawer {
+        position: fixed; right: 16px; bottom: 16px; width: 250px; z-index: 20;
+        background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px;
+        box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18); display: none;
+      }
+      .drawer.show { display: block; }
+      .drawer .row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+      .drawer .who { font-weight: 640; font-size: 13px; }
+      .drawer .meta { font-size: 11px; color: var(--muted); margin-bottom: 10px; word-break: break-all; }
+      .drawer .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>机房求助灯</h1>
+      <span class="sub" id="ctx-line">正在连接…</span>
+      <span class="spacer"></span>
+      <div class="tabs">
+        <button id="tab-grid" class="on">机位网格</button>
+        <button id="tab-stats">统计</button>
+      </div>
+      <button class="btn" id="btn-refresh">刷新</button>
+    </header>
+
+    <div class="banner err" id="banner-err"></div>
+    <div class="banner info" id="banner-info"></div>
+
+    <section id="view-grid">
+      <div class="summary" id="summary"></div>
+      <div class="grid" id="grid"></div>
+      <div class="legend">
+        <span><i style="background: var(--idle)"></i>未上报</span>
+        <span><i style="background: var(--working)"></i>进行中</span>
+        <span><i style="background: var(--stuck)"></i>卡住了</span>
+        <span><i style="background: var(--done)"></i>已完成</span>
+        <span>虚线边框 = 已响应 · 半透明 = 已解决</span>
+      </div>
+    </section>
+
+    <section id="view-stats" style="display: none">
+      <div class="panel" style="margin-bottom: 12px">
+        <h2>本节求助原因分布</h2>
+        <div class="bars" id="bars"></div>
+      </div>
+      <div class="panel">
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px">
+          <h2 style="margin: 0">历节课统计</h2>
+          <span class="spacer" style="flex: 1"></span>
+          <button class="btn" id="btn-export">导出本节 CSV</button>
+        </div>
+        <div id="history"><div class="empty">加载中…</div></div>
+      </div>
+    </section>
+
+    <div class="drawer" id="drawer">
+      <div class="row"><span class="who" id="d-who">—</span><span class="spacer" style="flex:1"></span><button class="btn" id="d-close">×</button></div>
+      <div class="meta" id="d-meta"></div>
+      <div class="actions">
+        <button class="btn primary" id="d-ack">我来了</button>
+        <button class="btn" id="d-resolve">已解决</button>
+        <button class="btn" id="d-reopen">回退待处理</button>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        'use strict';
+
+        var bridge = null;
+        var ctx = null;                 // 宿主注入的上下文 { pluginId, slot, lessonId, classId, theme, lang }
+        var board = null;               // 最近一次 /board 结果
+        var selected = null;            // 抽屉里选中的 cell
+        var view = 'grid';
+        var timer = null;
+        var busy = false;
+
+        var REASON_LABEL = { unclear: '看不懂题', error: '代码报错', env: '电脑或网络', missing: '找不到文件' };
+        var STATUS_LABEL = { idle: '未上报', working: '进行中', stuck: '卡住了', done: '已完成' };
+
+        var el = function (id) { return document.getElementById(id); };
+
+        function post(fn) {
+          if (bridge && bridge.ui && typeof bridge.ui.resize === 'function') {
+            setTimeout(function () { bridge.ui.resize(Math.max(document.body.scrollHeight, 360)); }, 30);
+          }
+          fn();
+        }
+
+        function showErr(msg) {
+          var b = el('banner-err');
+          b.textContent = msg;
+          b.className = 'banner err show';
+        }
+        function clearErr() { el('banner-err').className = 'banner err'; }
+
+        function api(path, opts) {
+          // api.get/post 在宿主父页面里发同源请求，带 session cookie —— 服务端才认得出
+          // 「是哪个老师/学生」。invokeCommand 走的是插件自己的 actor，拿不到身份。
+          if ((opts && opts.method) === 'POST') return bridge.api.post(path, opts.body || {});
+          return bridge.api.get(path);
+        }
+
+        function fmtMin(sec) {
+          if (!sec || sec < 0) return '';
+          if (sec < 60) return sec + 's';
+          var m = Math.floor(sec / 60);
+          if (m < 60) return m + ' 分钟';
+          return Math.floor(m / 60) + ' 小时 ' + (m % 60) + ' 分';
+        }
+
+        function baseQuery() {
+          // 上下文里的 lessonId/classId 只是提示，缺失时由服务端解析「进行中的课堂」
+          var parts = [];
+          if (ctx && ctx.lessonId) parts.push('lessonId=' + encodeURIComponent(ctx.lessonId));
+          if (ctx && ctx.classId) parts.push('classId=' + encodeURIComponent(ctx.classId));
+          return parts.join('&');
+        }
+
+        // ── 渲染：网格 ────────────────────────────────────────────────
+        function renderGrid() {
+          var grid = el('grid');
+          var cells = (board && board.cells) || [];
+          if (!cells.length) {
+            grid.innerHTML = '<div class="empty">这个班级还没有学生，或名册读取失败。</div>';
+            el('summary').innerHTML = '';
+            return;
+          }
+          // 卡住的排前面（教师最关心），其余按机位号
+          var sorted = cells.slice().sort(function (a, b) {
+            var rank = function (c) {
+              if (c.status === 'stuck' && c.teacherState === 'pending') return 0;
+              if (c.status === 'stuck') return 1;
+              if (c.status === 'working') return 2;
+              if (c.status === 'done') return 3;
+              return 4;
+            };
+            var d = rank(a) - rank(b);
+            if (d !== 0) return d;
+            return String(a.seatNo).localeCompare(String(b.seatNo), 'zh-CN', { numeric: true });
+          });
+
+          grid.innerHTML = sorted.map(function (c) {
+            var tag;
+            if (c.status === 'stuck') {
+              tag = (c.reason ? REASON_LABEL[c.reason] : '卡住了') + ' · ' + fmtMin(c.waitingSec);
+            } else if (c.status === 'idle') {
+              tag = '未上报';
+            } else {
+              tag = STATUS_LABEL[c.status];
+            }
+            var cls = 'cell s-' + c.status + ' t-' + c.teacherState;
+            return (
+              '<button class="' + cls + '" data-sid="' + c.studentId + '">' +
+              '<span class="seat">#' + escapeHtml(c.seatNo) + '</span>' +
+              '<span class="name">' + escapeHtml(c.name) + '</span>' +
+              '<span class="tag" title="' + escapeHtml(c.note || '') + '">' + escapeHtml(tag) + '</span>' +
+              '</button>'
+            );
+          }).join('');
+
+          Array.prototype.forEach.call(grid.querySelectorAll('.cell'), function (node) {
+            node.addEventListener('click', function () { openDrawer(node.getAttribute('data-sid')); });
+          });
+        }
+
+        function renderSummary() {
+          var s = (board && board.stats) || {};
+          var items = [
+            { k: '卡住（待处理）', v: countPending(), cls: 'stuck', unit: '人' },
+            { k: '已完成', v: s.doneCount || 0, cls: 'done', unit: '/' + (s.rosterCount || 0) },
+            { k: '完成率', v: Math.round((s.completionRate || 0) * 100), cls: '', unit: '%' },
+            { k: '平均响应', v: s.avgResponseSec == null ? '—' : fmtMin(s.avgResponseSec), cls: '', unit: '' },
+            { k: '最长等待', v: s.maxWaitSec ? fmtMin(s.maxWaitSec) : '—', cls: '', unit: '' },
+            { k: '本节求助次数', v: s.stuckCount || 0, cls: '', unit: '次' }
+          ];
+          el('summary').innerHTML = items.map(function (i) {
+            return (
+              '<div class="stat ' + i.cls + '"><div class="k">' + i.k + '</div>' +
+              '<div class="v">' + i.v + (i.unit ? '<small>' + i.unit + '</small>' : '') + '</div></div>'
+            );
+          }).join('');
+        }
+
+        function countPending() {
+          return ((board && board.cells) || []).filter(function (c) {
+            return c.status === 'stuck' && c.teacherState === 'pending';
+          }).length;
+        }
+
+        // ── 渲染：统计 ────────────────────────────────────────────────
+        function renderStats() {
+          var bd = (board && board.stats && board.stats.reasonBreakdown) || {};
+          var entries = Object.keys(REASON_LABEL).map(function (k) { return { key: k, label: REASON_LABEL[k], n: bd[k] || 0 }; });
+          var max = Math.max(1, Math.max.apply(null, entries.map(function (e) { return e.n; })));
+          el('bars').innerHTML = entries.map(function (e) {
+            var pct = Math.round((e.n / max) * 100);
+            return (
+              '<div class="bar"><span>' + e.label + '</span>' +
+              '<span class="track"><span class="fill" style="width:' + pct + '%"></span></span>' +
+              '<span>' + e.n + '</span></div>'
+            );
+          }).join('');
+        }
+
+        function loadHistory() {
+          if (!ctx || !ctx.classId) return;
+          el('history').innerHTML = '<div class="empty">加载中…</div>';
+          api('history?classId=' + encodeURIComponent(ctx.classId) + '&limit=20')
+            .then(function (res) {
+              var rows = (res && res.rows) || [];
+              if (!rows.length) {
+                el('history').innerHTML = '<div class="empty">还没有历史记录。教师端打开看板后，本节统计会自动落库。</div>';
+                return;
+              }
+              var head = '<tr><th>课节</th><th>求助次数</th><th>响应人数</th><th>平均响应</th><th>最长等待</th><th>完成率</th><th>高频原因</th><th>更新时间</th></tr>';
+              var body = rows.map(function (r) {
+                return (
+                  '<tr><td>' + escapeHtml(String(r.lessonId).slice(0, 8)) + '</td>' +
+                  '<td>' + (r.stuckCount || 0) + '</td>' +
+                  '<td>' + (r.ackedCount || 0) + '</td>' +
+                  '<td>' + (r.avgResponseSec == null ? '—' : fmtMin(r.avgResponseSec)) + '</td>' +
+                  '<td>' + (r.maxWaitSec ? fmtMin(r.maxWaitSec) : '—') + '</td>' +
+                  '<td>' + (r.completionRate == null ? '—' : Math.round(r.completionRate * 100) + '%') + '</td>' +
+                  '<td>' + escapeHtml(r.topReasonLabel || '—') + '</td>' +
+                  '<td>' + new Date(r.updatedAt).toLocaleString('zh-CN') + '</td></tr>'
+                );
+              }).join('');
+              el('history').innerHTML = '<table>' + head + body + '</table>';
+            })
+            .catch(function (err) {
+              el('history').innerHTML = '<div class="empty">历史加载失败：' + escapeHtml(String(err && err.message || err)) + '</div>';
+            });
+        }
+
+        // ── 抽屉：单格处置 ────────────────────────────────────────────
+        function openDrawer(studentId) {
+          var cells = (board && board.cells) || [];
+          selected = cells.filter(function (c) { return c.studentId === studentId; })[0] || null;
+          if (!selected) return;
+          el('d-who').textContent = '#' + selected.seatNo + ' ' + selected.name;
+          var meta = ['状态：' + STATUS_LABEL[selected.status]];
+          if (selected.status === 'stuck') meta.push('等待：' + fmtMin(selected.waitingSec));
+          if (selected.reason) meta.push('原因：' + REASON_LABEL[selected.reason]);
+          if (selected.responseSec != null) meta.push('响应耗时：' + fmtMin(selected.responseSec));
+          meta.push('处置：' + (selected.teacherState === 'pending' ? '待处理' : selected.teacherState === 'acked' ? '已响应' : '已解决'));
+          if (selected.note) meta.push('备注：' + selected.note);
+          el('d-meta').textContent = meta.join(' · ');
+          el('drawer').classList.add('show');
+          el('d-ack').disabled = selected.teacherState !== 'pending';
+          el('d-resolve').disabled = selected.teacherState === 'resolved';
+          el('d-reopen').disabled = selected.teacherState === 'pending';
+        }
+
+        function act(kind) {
+          if (!selected || !ctx) return;
+          busy = true;
+          api(kind, {
+            method: 'POST',
+            body: { lessonId: ctx.lessonId, classId: ctx.classId, studentId: selected.studentId }
+          })
+            .then(function () {
+              el('drawer').classList.remove('show');
+              return refresh();
+            })
+            .catch(function (err) { showErr('操作失败：' + String(err && err.message || err)); })
+            .then(function () { busy = false; });
+        }
+
+        // ── 数据刷新 ──────────────────────────────────────────────────
+        function refresh() {
+          if (busy) return Promise.resolve();
+          var q = baseQuery();
+          return api('board' + (q ? '?' + q : ''))
+            .then(function (res) {
+              // 服务端把解析出的课堂回传 → 回填 ctx，后续 ack / history / export 才有值
+              if (res && res.lessonId && res.classId) {
+                ctx = ctx || {};
+                ctx.lessonId = res.lessonId;
+                ctx.classId = res.classId;
+              }
+              clearErr();
+              board = res;
+              renderSummary();
+              renderGrid();
+              renderStats();
+              el('ctx-line').textContent = '课节 ' + String(res && res.lessonId || '').slice(0, 8) + ' · 更新于 ' + new Date().toLocaleTimeString('zh-CN');
+            })
+            .catch(function (err) {
+              showErr('读取失败：' + String((err && err.message) || err));
+            });
+        }
+
+        function switchView(next) {
+          view = next;
+          el('view-grid').style.display = next === 'grid' ? '' : 'none';
+          el('view-stats').style.display = next === 'stats' ? '' : 'none';
+          el('tab-grid').className = next === 'grid' ? 'on' : '';
+          el('tab-stats').className = next === 'stats' ? 'on' : '';
+          if (next === 'stats') { renderStats(); loadHistory(); }
+          if (bridge && bridge.ui) bridge.ui.resize(Math.max(document.body.scrollHeight, 360));
+        }
+
+        function exportCsv() {
+          if (!ctx || !ctx.lessonId) return;
+          api('export?lessonId=' + encodeURIComponent(ctx.lessonId))
+            .then(function (res) {
+              var blob = new Blob([res.csv], { type: 'text/csv;charset=utf-8' });
+              var url = URL.createObjectURL(blob);
+              var a = document.createElement('a');
+              a.href = url;
+              a.download = res.filename || 'lab-help.csv';
+              document.body.appendChild(a);
+              a.click();
+              setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 500);
+              if (bridge && bridge.ui) bridge.ui.toast('已导出 ' + (res.rowCount || 0) + ' 条记录', 'success');
+            })
+            .catch(function (err) { showErr('导出失败：' + String(err && err.message || err)); });
+        }
+
+        function escapeHtml(s) {
+          return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+          });
+        }
+
+        // ── 启动 ──────────────────────────────────────────────────────
+        function applyContext(next) {
+          ctx = ctx ? Object.assign({}, ctx, next) : next;
+          if (next && next.theme) {
+            document.documentElement.setAttribute('data-theme', next.theme === 'dark' ? 'dark' : 'light');
+          }
+          refresh();
+        }
+
+        function start() {
+          bridge.onInit(applyContext);
+          bridge.onContextUpdate(applyContext);
+          var initial = bridge.getContext && bridge.getContext();
+          if (initial) applyContext(initial);
+
+          el('tab-grid').onclick = function () { switchView('grid'); };
+          el('tab-stats').onclick = function () { switchView('stats'); };
+          el('btn-refresh').onclick = function () { refresh(); };
+          el('btn-export').onclick = exportCsv;
+          el('d-close').onclick = function () { el('drawer').classList.remove('show'); };
+          el('d-ack').onclick = function () { act('ack'); };
+          el('d-resolve').onclick = function () { act('resolve'); };
+          el('d-reopen').onclick = function () { act('reopen'); };
+
+          // 5 秒轮询；页面不可见时停（教师切到别的页签不烧请求）
+          timer = setInterval(function () {
+            if (document.hidden) return;
+            refresh();
+          }, 5000);
+          document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) refresh();
+          });
+          window.addEventListener('resize', function () {
+            if (bridge && bridge.ui) bridge.ui.resize(Math.max(document.body.scrollHeight, 360));
+          });
+          post(function () {});
+        }
+
+        var waited = 0;
+        var probe = setInterval(function () {
+          waited += 100;
+          if (window.OpenLearnPluginBridge) {
+            clearInterval(probe);
+            bridge = window.OpenLearnPluginBridge;
+            start();
+          } else if (waited > 5000) {
+            clearInterval(probe);
+            showErr('桥接脚本未注入：检查 /plugin-sandbox/view-bridge.js 是否被 CSP 或网络拦截。');
+          }
+        }, 100);
+      })();
+    </script>
+  </body>
+</html>

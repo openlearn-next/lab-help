@@ -1,0 +1,21 @@
+{
+  "name": "openlearn-plugin-lab-help",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "机房求助灯 —— 机房课堂的求助状态灯与响应闭环（教师机位网格 + 学生三态浮层）",
+  "author": "OpenLearn Ext",
+  "scripts": {
+    "build": "openlearn-plugin-sdk build",
+    "typecheck": "tsc --noEmit",
+    "pack": "node scripts/pack.mjs",
+    "dist": "npm run build && npm run pack"
+  },
+  "devDependencies": {
+    "@openlearn/plugin-sdk": "^3.7.4",
+    "@types/node": "^22.10.0",
+    "esbuild": "^0.25.0",
+    "jszip": "^3.10.1",
+    "typescript": "~5.8.0"
+  }
+}

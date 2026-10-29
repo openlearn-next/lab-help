@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>求助灯</title>
+    <script src="/plugin-sandbox/view-bridge.js"></script>
+    <style>
+      :root {
+        --bg: #ffffff;
+        --panel: #f8fafc;
+        --border: #e2e8f0;
+        --text: #1e293b;
+        --muted: #64748b;
+        --working: #3b82f6;
+        --stuck: #ef4444;
+        --done: #10b981;
+        --accent: #4f46e5;
+      }
+      html[data-theme='dark'] {
+        --bg: #1e293b;
+        --panel: #0f172a;
+        --border: #334155;
+        --text: #f1f5f9;
+        --muted: #94a3b8;
+        --working: #60a5fa;
+        --stuck: #f87171;
+        --done: #34d399;
+        --accent: #818cf8;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; padding: 10px 12px; background: var(--bg); color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        font-size: 13px; line-height: 1.45;
+      }
+      .head { display: flex; align-items: center; gap: 8px; }
+      .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
+      .dot.working { background: var(--working); }
+      .dot.stuck { background: var(--stuck); animation: blink 1.2s infinite; }
+      .dot.done { background: var(--done); }
+      @keyframes blink { 50% { opacity: 0.35; } }
+      .title { font-weight: 640; font-size: 13px; }
+      .state { font-size: 11px; color: var(--muted); margin-left: auto; }
+      .toast-bar {
+        display: none; margin-top: 8px; padding: 6px 10px; border-radius: 8px; font-size: 12px; font-weight: 600;
+        background: color-mix(in srgb, var(--stuck) 12%, transparent); color: var(--stuck);
+      }
+      .toast-bar.show { display: block; }
+      .toast-bar.ok { background: color-mix(in srgb, var(--done) 14%, transparent); color: var(--done); }
+      .states { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 9px; }
+      .st-btn {
+        border: 1px solid var(--border); background: var(--panel); color: var(--text);
+        border-radius: 8px; padding: 8px 4px; font-size: 12px; font-weight: 560; cursor: pointer;
+      }
+      .st-btn .ic { display: block; font-size: 14px; margin-bottom: 1px; }
+      .st-btn.on.working { border-color: var(--working); background: color-mix(in srgb, var(--working) 14%, transparent); color: var(--working); }
+      .st-btn.on.stuck { border-color: var(--stuck); background: color-mix(in srgb, var(--stuck) 14%, transparent); color: var(--stuck); }
+      .st-btn.on.done { border-color: var(--done); background: color-mix(in srgb, var(--done) 14%, transparent); color: var(--done); }
+      .more { display: none; margin-top: 9px; padding-top: 9px; border-top: 1px dashed var(--border); }
+      .more.show { display: block; }
+      .label { font-size: 11px; color: var(--muted); margin-bottom: 5px; }
+      .reasons { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+      .rs-btn {
+        border: 1px solid var(--border); background: var(--panel); color: var(--text);
+        border-radius: 7px; padding: 6px 4px; font-size: 12px; cursor: pointer;
+      }
+      .rs-btn.on { border-color: var(--stuck); color: var(--stuck); background: color-mix(in srgb, var(--stuck) 12%, transparent); font-weight: 600; }
+      input.note {
+        width: 100%; margin-top: 7px; padding: 6px 9px; border-radius: 7px; border: 1px solid var(--border);
+        background: var(--panel); color: var(--text); font-size: 12px; font-family: inherit;
+      }
+      input.note::placeholder { color: var(--muted); }
+      .submit {
+        width: 100%; margin-top: 8px; background: var(--stuck); color: #fff; border: none;
+        border-radius: 8px; padding: 8px; font-size: 12px; font-weight: 620; cursor: pointer;
+      }
+      .submit:disabled { opacity: 0.55; cursor: not-allowed; }
+      .err { display: none; margin-top: 7px; font-size: 11px; color: var(--stuck); }
+      .err.show { display: block; }
+    </style>
+  </head>
+  <body>
+    <div class="head">
+      <span class="dot" id="dot"></span>
+      <span class="title">求助灯</span>
+      <span class="state" id="state">连接中…</span>
+    </div>
+
+    <div class="toast-bar" id="teacher-bar"></div>
+
+    <div class="states">
+      <button class="st-btn" data-status="working"><span class="ic">▶</span>进行中</button>
+      <button class="st-btn" data-status="stuck"><span class="ic">✋</span>卡住了</button>
+      <button class="st-btn" data-status="done"><span class="ic">✓</span>已完成</button>
+    </div>
+
+    <div class="more" id="more">
+      <div class="label">卡在哪里？（选一个，帮助老师分诊）</div>
+      <div class="reasons">
+        <button class="rs-btn" data-reason="unclear">看不懂题</button>
+        <button class="rs-btn" data-reason="error">代码报错</button>
+        <button class="rs-btn" data-reason="env">电脑或网络</button>
+        <button class="rs-btn" data-reason="missing">找不到文件</button>
+      </div>
+      <input class="note" id="note" maxlength="60" placeholder="补充一句话（可不填，≤60 字）" />
+      <button class="submit" id="submit">发送求助</button>
+    </div>
+
+    <div class="err" id="err"></div>
+
+    <script>
+      (function () {
+        'use strict';
+
+        var bridge = null;
+        var ctx = null;
+        var self = { status: null, teacherState: null, reason: null, reported: false, active: null };
+        var picked = { reason: null, note: '' };
+        var busy = false;
+        var timer = null;
+
+        var el = function (id) { return document.getElementById(id); };
+
+        function resize() {
+          if (bridge && bridge.ui) bridge.ui.resize(Math.max(document.body.scrollHeight, 84));
+        }
+
+        function showErr(msg) {
+          var e = el('err');
+          e.textContent = msg;
+          e.className = 'err show';
+          resize();
+        }
+        function clearErr() { el('err').className = 'err'; }
+
+        function apiPost(path, body) { return bridge.api.post(path, body); }
+        function apiGet(path) { return bridge.api.get(path); }
+
+        function ready() {
+          return ctx && ctx.lessonId && ctx.classId;
+        }
+
+        function paint() {
+          var dot = el('dot');
+          dot.className = 'dot ' + (self.status || '');
+          var statusText;
+          if (self.active === false) {
+            statusText = '等老师开课';
+          } else if (self.active !== true) {
+            statusText = '正在获取课堂…';
+          } else {
+            statusText = self.status === 'stuck' ? '已上报：卡住了' : self.status === 'done' ? '已完成' : self.status === 'working' ? '进行中' : '未上报';
+          }
+          el('state').textContent = statusText;
+
+          Array.prototype.forEach.call(document.querySelectorAll('.st-btn'), function (b) {
+            b.className = 'st-btn' + (b.getAttribute('data-status') === self.status ? ' on ' + self.status : '');
+          });
+
+          // 卡住才展开原因面板；已解决/已响应给出明确反馈
+          var bar = el('teacher-bar');
+          if (self.status === 'stuck' && self.teacherState === 'acked') {
+            bar.className = 'toast-bar show';
+            bar.textContent = '老师已收到，马上过来 —— 你可以先试着看看报错信息。';
+          } else if (self.status === 'stuck' && self.teacherState === 'resolved') {
+            bar.className = 'toast-bar show ok';
+            bar.textContent = '老师已标记为已解决。若仍有问题，再点一次「卡住了」。';
+          } else if (self.status === 'stuck') {
+            bar.className = 'toast-bar show';
+            bar.textContent = '已进入求助队列，等待老师响应…';
+          } else {
+            bar.className = 'toast-bar';
+          }
+          resize();
+        }
+
+        function loadSelf() {
+          if (busy) return Promise.resolve();
+          // 上下文里的 lessonId/classId 只是提示（学生端通常为空），
+          // 课堂由服务端按「进行中的课堂会话」解析，解析结果回填到 ctx。
+          var qs = [];
+          if (ctx && ctx.lessonId) qs.push('lessonId=' + encodeURIComponent(ctx.lessonId));
+          if (ctx && ctx.classId) qs.push('classId=' + encodeURIComponent(ctx.classId));
+          return apiGet('self' + (qs.length ? '?' + qs.join('&') : ''))
+            .then(function (res) {
+              ctx = ctx || {};
+              if (res && res.lessonId) ctx.lessonId = res.lessonId;
+              if (res && res.classId) ctx.classId = res.classId;
+              self = res || self;
+              if (res && res.reported === false) {
+                self.status = null;
+                self.teacherState = null;
+              }
+              if (res && res.identityResolved === false) {
+                showErr('已进课堂，但名册里没找到你（账号 ' + (res.actorUserId || '?') + '），请联系老师。');
+              } else {
+                clearErr();
+              }
+              paint();
+            })
+            .catch(function (err) {
+              showErr('状态同步失败：' + String((err && err.message) || err));
+            });
+        }
+
+        function submit(status, reason, note, retried) {
+          if (!ready()) {
+            if (retried) { showErr('老师还没开始上课，暂时无法上报。'); return; }
+            // 首次点击时课堂可能还没解析出来 —— 先同步一次再重试
+            loadSelf().then(function () { submit(status, reason, note, true); });
+            return;
+          }
+          busy = true;
+          el('submit').disabled = true;
+          apiPost('report', {
+            lessonId: ctx.lessonId,
+            classId: ctx.classId,
+            status: status,
+            reason: reason || null,
+            note: note || null
+          })
+            .then(function (res) {
+              self.status = status;
+              self.teacherState = (res && res.teacherState) || 'pending';
+              self.reason = reason || null;
+              el('more').className = 'more';
+              paint();
+            })
+            .catch(function (err) {
+              showErr('上报失败：' + String(err && err.message || err));
+            })
+            .then(function () {
+              busy = false;
+              el('submit').disabled = false;
+            });
+        }
+
+        function onPick(status) {
+          clearErr();
+          if (status === 'stuck') {
+            // 先展开原因面板，选定后才真正上报 —— 让老师在走过去之前就知道是哪类问题
+            el('more').className = 'more show';
+            resize();
+            return;
+          }
+          el('more').className = 'more';
+          picked.reason = null;
+          picked.note = '';
+          submit(status, null, null);
+        }
+
+        function start() {
+          function apply(next) {
+            ctx = ctx ? Object.assign({}, ctx, next) : next;
+            if (next && next.theme) {
+              document.documentElement.setAttribute('data-theme', next.theme === 'dark' ? 'dark' : 'light');
+            }
+            loadSelf();
+          }
+          bridge.onInit(apply);
+          bridge.onContextUpdate(apply);
+          var initial = bridge.getContext && bridge.getContext();
+          if (initial) apply(initial);
+
+          Array.prototype.forEach.call(document.querySelectorAll('.st-btn'), function (b) {
+            b.addEventListener('click', function () { onPick(b.getAttribute('data-status')); });
+          });
+          Array.prototype.forEach.call(document.querySelectorAll('.rs-btn'), function (b) {
+            b.addEventListener('click', function () {
+              picked.reason = b.getAttribute('data-reason');
+              Array.prototype.forEach.call(document.querySelectorAll('.rs-btn'), function (x) { x.className = 'rs-btn'; });
+              b.className = 'rs-btn on';
+            });
+          });
+          el('note').addEventListener('input', function () { picked.note = el('note').value; });
+          el('submit').addEventListener('click', function () {
+            if (!picked.reason) { showErr('先选一个卡住的原因。'); return; }
+            submit('stuck', picked.reason, picked.note);
+          });
+
+          if (!ready()) {
+            el('state').textContent = '正在获取课堂…';
+          }
+          paint();
+          timer = setInterval(function () {
+            if (document.hidden) return;
+            loadSelf();
+          }, 5000);
+          document.addEventListener('visibilitychange', function () { if (!document.hidden) loadSelf(); });
+          window.addEventListener('resize', resize);
+        }
+
+        var waited = 0;
+        var probe = setInterval(function () {
+          waited += 100;
+          if (window.OpenLearnPluginBridge) {
+            clearInterval(probe);
+            bridge = window.OpenLearnPluginBridge;
+            start();
+          } else if (waited > 5000) {
+            clearInterval(probe);
+            showErr('桥接脚本未注入');
+          }
+        }, 100);
+      })();
+    </script>
+  </body>
+</html>

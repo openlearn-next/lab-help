@@ -1,0 +1,94 @@
+{
+  "id": "@ext/lab-help",
+  "name": "机房求助灯",
+  "version": "0.1.0",
+  "main": "index.js",
+  "executionMode": "process",
+  "description": "机房课堂求助状态灯：学生一键上报「卡住了/进行中/已完成」，教师端机位网格实时看全班状态，一键响应并留下可统计的求助记录",
+  "author": "OpenLearn Ext",
+  "icon": "Radio",
+  "engines": {
+    "openlearn": ">=0.7.6"
+  },
+  "requires": [
+    "@openlearn/core:ICommandBusService@^1.0.0",
+    "@openlearn/core:IActionRegistryService@^1.0.0",
+    "@openlearn/core:IEventBusService@^1.0.0",
+    "@openlearn/core:IDatabase@^1.0.0"
+  ],
+  "capabilitiesProposed": ["lesson:read", "lesson:write", "management:read"],
+  "api": {
+    "routes": [
+      {
+        "method": "GET",
+        "path": "/board",
+        "roles": ["teacher", "administrator"],
+        "rateLimit": { "windowMs": 60000, "max": 1200 }
+      },
+      {
+        "method": "GET",
+        "path": "/self",
+        "rateLimit": { "windowMs": 60000, "max": 6000 }
+      },
+      {
+        "method": "POST",
+        "path": "/report",
+        "rateLimit": { "windowMs": 60000, "max": 6000 }
+      },
+      {
+        "method": "POST",
+        "path": "/ack",
+        "roles": ["teacher", "administrator"],
+        "rateLimit": { "windowMs": 60000, "max": 1200 }
+      },
+      {
+        "method": "POST",
+        "path": "/resolve",
+        "roles": ["teacher", "administrator"],
+        "rateLimit": { "windowMs": 60000, "max": 1200 }
+      },
+      {
+        "method": "POST",
+        "path": "/reopen",
+        "roles": ["teacher", "administrator"],
+        "rateLimit": { "windowMs": 60000, "max": 600 }
+      },
+      {
+        "method": "GET",
+        "path": "/history",
+        "roles": ["teacher", "administrator"],
+        "rateLimit": { "windowMs": 60000, "max": 300 }
+      },
+      {
+        "method": "GET",
+        "path": "/export",
+        "roles": ["teacher", "administrator"],
+        "rateLimit": { "windowMs": 60000, "max": 120 }
+      },
+      {
+        "method": "GET",
+        "path": "/meta",
+        "rateLimit": { "windowMs": 60000, "max": 600 }
+      }
+    ]
+  },
+  "contributes": {
+    "teacher.tab": [
+      {
+        "id": "tab_lab_help",
+        "label": "机房求助",
+        "icon": "Radio",
+        "position": 40,
+        "view": "storage/dashboard.html"
+      }
+    ],
+    "student.classroom.overlay": [
+      {
+        "id": "overlay_lab_help",
+        "label": "求助",
+        "icon": "Hand",
+        "view": "storage/overlay.html"
+      }
+    ]
+  }
+}
